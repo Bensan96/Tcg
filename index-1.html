@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TCG Empire: Industrial Update</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        body { background-color: #020617; color: #e2e8f0; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+        
+        /* Animations */
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-2px) rotate(-1deg); } 75% { transform: translateX(2px) rotate(1deg); } }
+        @keyframes pop-in { 0% { opacity: 0; transform: scale(0.9); } 100% { opacity: 1; transform: scale(1); } }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        
+        .animate-shake { animation: shake 0.4s ease-in-out infinite; }
+        .animate-pop { animation: pop-in 0.3s ease-out forwards; }
+        
+        /* Effects */
+        .holo-bg {
+            background: linear-gradient(115deg, transparent 40%, rgba(255,255,255,0.4) 50%, transparent 60%);
+            background-size: 200% 100%;
+            animation: shimmer 3s infinite linear;
+        }
+        .polychrome-bg {
+            background: linear-gradient(45deg, #ff0000, #ff7300, #fffb00, #48ff00, #00ffd5, #002bff, #7a00ff, #ff00c8, #ff0000);
+            background-size: 400%;
+            animation: shimmer 10s linear infinite;
+            opacity: 0.3;
+            mix-blend-mode: overlay;
+        }
+        .slab-glare {
+            background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.1) 45%, rgba(255,255,255,0.0) 50%);
+            pointer-events: none;
+        }
+        .transcendent-text {
+            background: linear-gradient(to right, #e2e8f0, #a855f7, #3b82f6, #e2e8f0);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            background-size: 200%;
+            animation: shimmer 3s linear infinite;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useRef, useMemo, useCallback } from 'https://esm.sh/react@18.2.0';
+        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+        import { 
+            Sparkles, Trophy, Coins, RotateCcw, TrendingUp, Wallet, Star, Zap, Lock, 
+            BookOpen, Hammer, Skull, Stamp, Award, Search, Grid, Clock, Store, 
+            Gem, Flame, Droplets, Wind, Mountain, Sun, Moon, Ghost, Sword, Shield,
+            Anchor, Heart, Cloud, Filter, X, ArrowDownUp, Settings, Trash2, AlertTriangle, Infinity, Eye, Diamond, Plus
+        } from 'https://esm.sh/lucide-react@0.300.0';
+
+        // --- CONFIGURATION ---
+
+        const RARITY_TIERS = [
+          { id: 'common', name: 'Common', count: 30, color: 'from-slate-400 to-slate-500', text: 'text-slate-900', btn: 'bg-slate-500', mult: 0.8, timer: 10000 },
+          { id: 'uncommon', name: 'Uncommon', count: 25, color: 'from-green-600 to-emerald-800', text: 'text-green-50', btn: 'bg-green-600', mult: 2.5, timer: 30000 },
+          { id: 'rare', name: 'Rare', count: 20, color: 'from-blue-600 to-indigo-800', text: 'text-blue-50', btn: 'bg-blue-600', mult: 8, timer: 60000 },
+          { id: 'epic', name: 'Epic', count: 15, color: 'from-purple-600 to-fuchsia-900', text: 'text-purple-50', btn: 'bg-purple-600', mult: 60, timer: 120000 }, 
+          { id: 'legendary', name: 'Legendary', count: 10, color: 'from-orange-500 to-red-700', text: 'text-orange-50', btn: 'bg-orange-600', mult: 200, timer: 300000 }, 
+          { id: 'mythic', name: 'Mythic', count: 5, color: 'from-rose-600 to-rose-950', text: 'text-rose-50', btn: 'bg-rose-700', mult: 1000, timer: 600000 }, 
+          { id: 'cosmic', name: 'Cosmic', count: 1, color: 'from-gray-900 to-black', text: 'text-indigo-200', btn: 'bg-slate-800 border border-indigo-500', mult: 5000, timer: 1800000 }, 
+          { id: 'transcendent', name: 'Transcendent', count: 1, color: 'from-fuchsia-600 via-purple-900 to-blue-900', text: 'text-white', btn: 'bg-black border border-fuchsia-500', mult: 1000000, timer: 1000 }
+        ];
+
+        const PACKS = [
+          { id: 0, name: 'Trash Bag', cost: 10, odds: { common: 95, uncommon: 4.9, rare: 0.1 } },
+          { id: 1, name: 'Local Store', cost: 100, odds: { common: 75, uncommon: 20, rare: 4.9, epic: 0.1 } },
+          { id: 2, name: 'Hobby Shop', cost: 1200, odds: { common: 50, uncommon: 40, rare: 9, epic: 0.9, legendary: 0.1 } },
+          { id: 3, name: 'Collector Case', cost: 10000, odds: { uncommon: 60, rare: 35, epic: 4.5, legendary: 0.49, mythic: 0.01 } }, 
+          { id: 4, name: 'Museum Heist', cost: 150000, odds: { rare: 60, epic: 30, legendary: 9, mythic: 0.99, cosmic: 0.01 } }, 
+          { id: 5, name: 'Black Market', cost: 5000000, odds: { epic: 70, legendary: 25, mythic: 4.9, cosmic: 0.1 } }, 
+          { id: 6, name: 'Temporal Vault', cost: 250000000, odds: { legendary: 75, mythic: 20, cosmic: 5 } }, 
+          { id: 7, name: 'Singularity', cost: 25000000000, odds: { mythic: 80, cosmic: 19.999, transcendent: 0.001 } } 
+        ];
+
+        const GRADES = [
+          { score: 1, label: 'PR 1', mult: 0.8, color: 'text-red-600' },
+          { score: 2, label: 'GD 2', mult: 0.9, color: 'text-red-500' },
+          { score: 3, label: 'VG 3', mult: 1.0, color: 'text-orange-600' },
+          { score: 4, label: 'VG-EX 4', mult: 1.2, color: 'text-orange-500' },
+          { score: 5, label: 'EX 5', mult: 1.5, color: 'text-yellow-600' },
+          { score: 6, label: 'EX-MT 6', mult: 2.0, color: 'text-yellow-500' },
+          { score: 7, label: 'NM 7', mult: 3.0, color: 'text-green-600' },
+          { score: 8, label: 'NM-MT 8', mult: 5.0, color: 'text-green-500' },
+          { score: 9, label: 'MINT 9', mult: 15.0, color: 'text-emerald-400' },
+          { score: 10, label: 'GEM MT 10', mult: 50.0, color: 'text-cyan-400 font-bold animate-pulse' },
+        ];
+
+        const TALENTS = [
+          { id: 'work', name: 'Hustler', desc: 'Increases Manual Labor cash by +$1.', costBase: 10, costScale: 2.0, max: 20 },
+          { id: 'luck', name: 'Treasure Hunter', desc: 'Increases chance for higher tier cards.', costBase: 15, costScale: 2.5, max: 10 },
+          { id: 'market', name: 'Market Maker', desc: 'Market sales happen 10% faster.', costBase: 25, costScale: 1.8, max: 10 },
+          { id: 'discount', name: 'Charisma', desc: 'Pack costs 1% less per level.', costBase: 50, costScale: 1.5, max: 20 },
+          { id: 'gradeLow', name: 'Basic Grading', desc: 'Common/Uncommon grading 20% faster.', costBase: 5, costScale: 2, max: 5 },
+          { id: 'gradeHigh', name: 'Expert Grading', desc: 'Rare+ grading 10% faster.', costBase: 100, costScale: 2, max: 5 },
+          { id: 'foilChance', name: 'Shiny Hunter', desc: 'Increases chance for Holo/Polychrome.', costBase: 200, costScale: 3, max: 5 },
+          { id: 'gradeLuck', name: 'Eye for Quality', desc: 'Increases chance for Grade 9 or 10.', costBase: 500, costScale: 4, max: 5 },
+          { id: 'gradeSlots', name: 'Industrial Scale', desc: 'Adds +1 Grading Slot per level.', costBase: 1000, costScale: 3.0, max: 5 }, // NEW
+        ];
+
+        const ADJECTIVES = ["Rusty", "Old", "Broken", "Dull", "Standard", "Solid", "Shiny", "Gleaming", "Blessed", "Holy", "Dark", "Cursed", "Ancient", "Forbidden", "Eternal", "Infinite"];
+        const NOUNS = ["Rock", "Twig", "Coin", "Boot", "Dagger", "Shield", "Helm", "Scroll", "Wand", "Ring", "Amulet", "Crown", "Throne", "Soul", "Star", "Galaxy"];
+        const ICONS = [Gem, Flame, Droplets, Wind, Mountain, Sun, Moon, Ghost, Sword, Shield, Skull, Zap, Star, Anchor, Heart, Cloud];
+
+        const CARD_DATABASE = [];
+        RARITY_TIERS.forEach(tier => {
+          for (let i = 1; i <= tier.count; i++) {
+            const adj = tier.id === 'transcendent' ? 'THE' : ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+            const noun = tier.id === 'transcendent' ? 'FINAL FORM' : NOUNS[Math.floor(Math.random() * NOUNS.length)];
+            const iconIndex = tier.id === 'transcendent' ? 15 : Math.floor(Math.random() * ICONS.length);
+            CARD_DATABASE.push({
+              id: `${tier.id}_${i}`,
+              tierId: tier.id,
+              name: `${adj} ${noun}`,
+              number: i,
+              iconIndex: iconIndex,
+              hue: Math.floor(Math.random() * 360),
+              baseValue: Math.max(1, Math.floor(10 * tier.mult * (1 + Math.random() * 0.5))) 
+            });
+          }
+        });
+
+        const RARITY_RANK = { 'common': 0, 'uncommon': 1, 'rare': 2, 'epic': 3, 'legendary': 4, 'mythic': 5, 'cosmic': 6, 'transcendent': 7 };
+
+        const formatNumber = (num) => {
+          if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
+          if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+          if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+          if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
+          return Math.floor(num).toLocaleString();
+        };
+
+        const calculateTalentCost = (talentId, currentLevel) => {
+          const t = TALENTS.find(t => t.id === talentId);
+          return Math.floor(t.costBase * Math.pow(t.costScale, currentLevel));
+        };
+
+        // --- COMPONENTS ---
+
+        const CardArt = React.memo(({ cardId, effectType }) => {
+            const data = CARD_DATABASE.find(c => c.id === cardId);
+            const Icon = data.tierId === 'transcendent' ? Infinity : ICONS[data.iconIndex];
+            return (
+                <div className="w-full h-full flex items-center justify-center relative overflow-hidden rounded-md"
+                    style={{ background: data.tierId === 'transcendent' ? 'radial-gradient(circle, #000 0%, #20002c 100%)' : `linear-gradient(${data.hue}deg, #1e293b 0%, #0f172a 100%)` }}>
+                    <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 50% 50%, rgba(255,255,255,0.2) 2px, transparent 2px)', backgroundSize: '10px 10px' }} />
+                    <div className={`relative z-10 p-4 rounded-full bg-white/5 border border-white/10 shadow-xl backdrop-blur-sm ${data.tierId === 'transcendent' ? 'animate-spin-slow' : ''}`}>
+                        <Icon size={data.tierId === 'transcendent' ? 40 : 32} color={data.tierId === 'transcendent' ? '#fff' : `hsl(${data.hue}, 70%, 60%)`} strokeWidth={1.5} />
+                    </div>
+                    {(effectType === 'holo' || data.tierId === 'transcendent') && <div className="absolute inset-0 holo-bg opacity-40 pointer-events-none z-20" />}
+                    {(effectType === 'polychrome' || data.tierId === 'transcendent') && <div className="absolute inset-0 polychrome-bg pointer-events-none z-20" />}
+                    {['holo', 'polychrome'].includes(effectType) && <div className="absolute top-1 right-1 text-yellow-300 animate-pulse z-30"><Sparkles size={12} fill="currentColor" /></div>}
+                </div>
+            )
+        }, (prev, next) => prev.cardId === next.cardId && prev.effectType === next.effectType);
+
+        const Card = React.memo(({ instance, onClick, onAction, actionLabel, isNew, showValue = true }) => {
+          const data = CARD_DATABASE.find(c => c.id === instance.cardId);
+          const tier = RARITY_TIERS.find(t => t.id === data.tierId);
+          const gradeInfo = instance.grade ? GRADES.find(g => g.score === instance.grade) : null;
+          const isGraded = instance.grade !== null && instance.grade !== undefined;
+          
+          return (
+            <div className={`relative group w-32 h-52 transition-all duration-300 ${isNew ? 'animate-pop' : ''}`}>
+              {onAction && !isNew && !isGraded && (
+                <button onClick={(e) => { e.stopPropagation(); onAction(instance); }} className="absolute -top-2 -right-2 z-30 bg-blue-600 hover:bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center shadow-lg border border-white text-xs font-bold" title={actionLabel}>
+                  {actionLabel === 'grade' && <Stamp size={12} />}
+                  {actionLabel === 'cancel' && <X size={12} />}
+                </button>
+              )}
+              <div onClick={onClick} className={`w-full h-full flex flex-col cursor-pointer overflow-hidden relative shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-transform ${isGraded ? 'bg-white/10 border-4 border-slate-300 rounded-lg p-1.5' : `bg-gradient-to-br ${tier.color} rounded-xl border border-white/10 p-1.5`} `}>
+                {isGraded && <div className="absolute inset-0 slab-glare z-20 rounded-lg"></div>}
+                <div className={`flex justify-between items-center mb-1 px-1 relative z-10`}>
+                    <span className={`text-[9px] font-bold uppercase truncate max-w-[70%] ${isGraded ? 'text-slate-200' : 'text-white/80'}`}>{tier.name}</span>
+                    {isGraded && <div className="bg-slate-200 px-1 rounded text-[8px] font-black text-black border border-slate-400">{gradeInfo.label}</div>}
+                </div>
+                <div className={`flex-grow w-full relative mb-1 shadow-inner overflow-hidden ${isGraded ? `rounded border border-slate-500 bg-gradient-to-br ${tier.color}` : 'rounded-lg border border-white/20'}`}>
+                  <CardArt cardId={data.id} effectType={instance.effect} />
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-1 text-center border-t border-white/10"><div className={`text-[9px] font-bold text-white truncate ${data.tierId === 'transcendent' ? 'transcendent-text' : ''}`}>{data.name}</div></div>
+                </div>
+                <div className="w-full text-center bg-black/40 rounded py-0.5 relative z-10">
+                   {showValue && <div className={`font-mono font-bold text-xs ${isGraded ? 'text-green-400' : 'text-white'}`}>${formatNumber(instance.value)}</div>}
+                </div>
+              </div>
+            </div>
+          );
+        }, (prev, next) => prev.instance === next.instance && prev.isNew === next.isNew);
+
+        // --- MAIN APP ---
+
+        function App() {
+          const [cash, setCash] = useState(0); 
+          const [voidStones, setVoidStones] = useState(0);
+          const [inventory, setInventory] = useState([]); 
+          const [collection, setCollection] = useState({}); 
+          const [talents, setTalents] = useState({ work: 0, luck: 0, market: 0, discount: 0, gradeLow: 0, gradeHigh: 0, foilChance: 0, gradeLuck: 0, gradeSlots: 0 });
+          const [stats, setStats] = useState({ packsOpened: 0, cardsSold: 0, manualClicks: 0 });
+          const [marketListings, setMarketListings] = useState([]); 
+          const [gradingQueue, setGradingQueue] = useState([]); 
+          const [hasGradingLicense, setHasGradingLicense] = useState(false);
+          const [view, setView] = useState('packs'); 
+          const [openingState, setOpeningState] = useState('idle'); 
+          const [openingPackId, setOpeningPackId] = useState(null);
+          const [revealedCards, setRevealedCards] = useState([]);
+          const [ascendModalOpen, setAscendModalOpen] = useState(false);
+          const [notification, setNotification] = useState(null);
+          const [gameWon, setGameWon] = useState(false);
+          const [currentTime, setCurrentTime] = useState(Date.now());
+          
+          const [filterRarity, setFilterRarity] = useState('all');
+          const [filterStatus, setFilterStatus] = useState('all');
+          const [sortOrder, setSortOrder] = useState('price-desc'); 
+          const [showResetModal, setShowResetModal] = useState(false);
+
+          // Refs for synchronous checking
+          const cashRef = useRef(cash);
+          const gradingQueueRef = useRef(gradingQueue);
+          
+          useEffect(() => { cashRef.current = cash; }, [cash]);
+          useEffect(() => { gradingQueueRef.current = gradingQueue; }, [gradingQueue]);
+
+          useEffect(() => {
+              if (view !== 'opening' && revealedCards.length > 0) {
+                  setInventory(prev => [...prev, ...revealedCards]);
+                  setRevealedCards([]);
+                  setOpeningState('idle');
+                  notify("Items auto-collected");
+              }
+          }, [view]);
+
+          useEffect(() => {
+            const saved = localStorage.getItem('tcgInd_v1');
+            if (saved) {
+                try {
+                    const d = JSON.parse(saved);
+                    setCash(d.cash || 0);
+                    setVoidStones(d.voidStones || 0);
+                    setInventory(d.inventory || []);
+                    setCollection(d.collection || {});
+                    // Ensure new talents exist in old saves
+                    setTalents({ 
+                        work: 0, luck: 0, market: 0, discount: 0, gradeLow: 0, gradeHigh: 0, foilChance: 0, gradeLuck: 0, gradeSlots: 0,
+                        ...(d.talents || {}) 
+                    });
+                    setStats(d.stats || { packsOpened: 0, cardsSold: 0, manualClicks: 0 });
+                    setHasGradingLicense(d.hasGradingLicense || false);
+                    setMarketListings(d.marketListings || []);
+                    setGradingQueue(d.gradingQueue || []);
+                    setGameWon(d.gameWon || false);
+                } catch (e) { console.error("Save Error", e); }
+            }
+          }, []);
+
+          useEffect(() => {
+            localStorage.setItem('tcgInd_v1', JSON.stringify({
+                cash, voidStones, inventory, collection, talents, stats, hasGradingLicense, marketListings, gradingQueue, gameWon
+            }));
+          }, [cash, voidStones, inventory, collection, talents, stats, hasGradingLicense, marketListings, gradingQueue, gameWon]);
+
+          // Loop
+          useEffect(() => {
+              const tick = setInterval(() => {
+                  const now = Date.now();
+                  setCurrentTime(now);
+
+                  setMarketListings(prev => {
+                      let changed = false;
+                      let earned = 0;
+                      let soldCount = 0;
+                      const next = [];
+                      prev.forEach(item => {
+                          if (now >= item.finishAt) {
+                              earned += item.price;
+                              soldCount++;
+                              changed = true;
+                          } else {
+                              next.push(item);
+                          }
+                      });
+                      if (changed) {
+                          setCash(c => c + earned);
+                          setStats(s => ({ ...s, cardsSold: s.cardsSold + soldCount }));
+                          notify(`Market: Sold ${soldCount} items for $${formatNumber(earned)}`);
+                      }
+                      return changed ? next : prev;
+                  });
+
+                  setGradingQueue(prev => {
+                      let changed = false;
+                      const next = [];
+                      const finished = [];
+                      prev.forEach(item => {
+                          if (now >= item.finishAt) {
+                              let r = Math.random() * 100;
+                              r += (talents.gradeLuck || 0) * 2;
+                              let score = 5;
+                              if (r > 99) score = 10; else if (r > 95) score = 9; else if (r > 85) score = 8; else if (r > 70) score = 7; else if (r > 50) score = 6; else if (r > 30) score = 5; else score = Math.ceil(Math.random() * 4);
+                              const gData = GRADES.find(g => g.score === score);
+                              const newVal = Math.floor(item.instance.value * gData.mult);
+                              finished.push({ ...item.instance, grade: score, value: newVal });
+                              changed = true;
+                              notify(`Grading Returned: ${gData.label}`);
+                          } else {
+                              next.push(item);
+                          }
+                      });
+
+                      if (changed) {
+                          setInventory(inv => [...inv, ...finished]);
+                          setCollection(col => {
+                              const nextCol = { ...col };
+                              finished.forEach(card => {
+                                  const entry = nextCol[card.cardId] || { count: 0, holo: false, grades: [] };
+                                  if (!entry.grades.includes(card.grade)) {
+                                      nextCol[card.cardId] = { ...entry, grades: [...entry.grades, card.grade] };
+                                  }
+                              });
+                              return nextCol;
+                          });
+                      }
+                      return changed ? next : prev;
+                  });
+              }, 50);
+              return () => clearInterval(tick);
+          }, [talents.gradeLuck]);
+
+          const notify = (msg) => { setNotification(msg); setTimeout(() => setNotification(null), 3000); };
+
+          const manualWork = () => {
+            setCash(c => c + (1 + talents.work));
+            setStats(s => ({ ...s, manualClicks: s.manualClicks + 1 }));
+          };
+
+          const buyPack = (packId) => {
+            const pack = PACKS[packId];
+            const cost = Math.floor(pack.cost * (1 - (talents.discount * 0.01)));
+            if (cash >= cost) {
+              setCash(c => c - cost);
+              setStats(s => ({ ...s, packsOpened: s.packsOpened + 1 }));
+              setOpeningPackId(packId);
+              setView('opening');
+              setOpeningState('shaking');
+              setTimeout(() => { generatePackContents(pack); setOpeningState('revealed'); }, 1200); 
+            } else {
+                notify("Not enough cash!");
+            }
+          };
+
+          const generatePackContents = (pack) => {
+            const newCards = [];
+            for (let i = 0; i < 5; i++) {
+                let r = Math.random() * 100;
+                let adjustedRoll = r + (talents.luck * 0.4); 
+                let tierId = 'common';
+                let cursor = 0;
+                let selected = false;
+                for (const [key, chance] of Object.entries(pack.odds)) {
+                    cursor += chance;
+                    if (adjustedRoll <= cursor) { tierId = key; selected = true; break; }
+                }
+                if (!selected) { const keys = Object.keys(pack.odds); tierId = keys[keys.length - 1]; }
+                const tierData = CARD_DATABASE.filter(c => c.tierId === tierId);
+                const cardData = tierData[Math.floor(Math.random() * tierData.length)];
+                
+                let effect = 'none'; let valMult = 1;
+                const effectRoll = Math.random() * 100;
+                const bonus = (talents.foilChance || 0) * 0.5; 
+                if (effectRoll < (0.5 + (bonus/10))) { effect = 'polychrome'; valMult = 50; } 
+                else if (effectRoll < (5 + bonus)) { effect = 'holo'; valMult = 10; }
+                
+                let val = cardData.baseValue * valMult;
+                if (tierId === 'transcendent') setGameWon(true);
+                newCards.push({ instanceId: Date.now() + i + Math.random(), cardId: cardData.id, value: Math.floor(val), effect, grade: null });
+            }
+            
+            setRevealedCards(newCards);
+            setCollection(prev => {
+                const nextCol = { ...prev };
+                newCards.forEach(card => {
+                    const entry = nextCol[card.cardId] || { count: 0, holo: false, grades: [] };
+                    nextCol[card.cardId] = { ...entry, count: entry.count + 1, holo: entry.holo || (card.effect !== 'none') };
+                });
+                return nextCol;
+            });
+          };
+
+          const takeCards = (buyAnotherPackId = null) => {
+              setInventory(prev => [...prev, ...revealedCards]);
+              setRevealedCards([]);
+              if (buyAnotherPackId !== null && !gameWon) buyPack(buyAnotherPackId); else { setOpeningState('idle'); setView('inventory'); }
+          };
+
+          const quickSell = useCallback((instance) => {
+              const val = Math.floor(instance.value * 0.5); 
+              setCash(c => c + val);
+              setInventory(prev => prev.filter(i => i.instanceId !== instance.instanceId));
+              notify(`Quick Sold for $${formatNumber(val)}`);
+          }, []);
+
+          const listOnMarket = useCallback((instance) => {
+              setInventory(prev => prev.filter(i => i.instanceId !== instance.instanceId));
+              const data = CARD_DATABASE.find(c => c.id === instance.cardId);
+              const tier = RARITY_TIERS.find(t => t.id === data.tierId);
+              const baseTime = tier.timer;
+              const reduction = talents.market * 0.1;
+              const duration = Math.max(2000, Math.floor(baseTime * (1 - reduction)));
+              setMarketListings(prev => [...prev, { instance, listedAt: Date.now(), finishAt: Date.now() + duration, price: instance.value }]);
+              notify("Item Listed");
+          }, [talents.market]);
+
+          const cancelListing = (listing) => {
+              setMarketListings(prev => prev.filter(i => i.instance.instanceId !== listing.instance.instanceId));
+              setInventory(prev => [...prev, listing.instance]);
+              notify("Listing Cancelled");
+          };
+
+          const marketAllNormals = () => {
+              const normals = inventory.filter(item => !item.grade && item.effect === 'none');
+              if (normals.length === 0) { notify("No normal cards to sell"); return; }
+              setInventory(prev => prev.filter(item => item.grade || item.effect !== 'none'));
+              const newListings = normals.map(item => {
+                  const data = CARD_DATABASE.find(c => c.id === item.cardId);
+                  const tier = RARITY_TIERS.find(t => t.id === data.tierId);
+                  const baseTime = tier.timer;
+                  const reduction = talents.market * 0.1;
+                  const duration = Math.max(2000, Math.floor(baseTime * (1 - reduction)));
+                  return { instance: item, listedAt: Date.now(), finishAt: Date.now() + duration, price: item.value };
+              });
+              setMarketListings(prev => [...prev, ...newListings]);
+              notify(`Bulk listed ${normals.length} items`);
+          };
+
+          // --- NEW FEATURE: MARKET BY RARITY ---
+          const marketByRarity = (tierId) => {
+              // Filters: Must match Tier, No Grade, No Effect
+              const items = inventory.filter(item => {
+                  const data = CARD_DATABASE.find(c => c.id === item.cardId);
+                  return data.tierId === tierId && !item.grade && item.effect === 'none';
+              });
+
+              if (items.length === 0) { notify("No items of this rarity to list"); return; }
+
+              setInventory(prev => prev.filter(item => {
+                  const data = CARD_DATABASE.find(c => c.id === item.cardId);
+                  return !(data.tierId === tierId && !item.grade && item.effect === 'none');
+              }));
+
+              const newListings = items.map(item => {
+                  const data = CARD_DATABASE.find(c => c.id === item.cardId);
+                  const tier = RARITY_TIERS.find(t => t.id === data.tierId);
+                  const baseTime = tier.timer;
+                  const reduction = talents.market * 0.1;
+                  const duration = Math.max(2000, Math.floor(baseTime * (1 - reduction)));
+                  return { instance: item, listedAt: Date.now(), finishAt: Date.now() + duration, price: item.value };
+              });
+
+              setMarketListings(prev => [...prev, ...newListings]);
+              notify(`Listed ${items.length} ${RARITY_TIERS.find(t=>t.id===tierId).name} items`);
+          };
+
+          const sendToGrading = useCallback((instance) => {
+            if (instance.grade) { notify("Already Graded!"); return; }
+            const cost = Math.max(10, Math.floor(instance.value * 0.1));
+            
+            // Dynamic Max Slots
+            const maxSlots = 5 + (talents.gradeSlots || 0);
+
+            if (cashRef.current < cost) { notify("Cannot afford fee"); return; }
+            if (gradingQueueRef.current.length >= maxSlots) { notify(`Grading Slots Full (${gradingQueueRef.current.length}/${maxSlots})`); return; }
+
+            setCash(c => c - cost);
+            setInventory(prev => prev.filter(i => i.instanceId !== instance.instanceId));
+            
+            const data = CARD_DATABASE.find(c => c.id === instance.cardId);
+            const tier = RARITY_TIERS.find(t => t.id === data.tierId);
+            let speedMult = 1;
+            const rank = RARITY_RANK[data.tierId];
+            if (rank <= 1) speedMult -= (talents.gradeLow * 0.2); 
+            if (rank >= 2) speedMult -= (talents.gradeHigh * 0.1); 
+            
+            const duration = Math.max(1000, Math.floor(tier.timer * 2 * speedMult));
+            setGradingQueue(prev => [...prev, { instance, startAt: Date.now(), finishAt: Date.now() + duration }]);
+            notify("Sent to Grading...");
+          }, [talents.gradeSlots]); // Depend on talent to update slots
+
+          const cancelGrading = (item) => {
+              setGradingQueue(prev => prev.filter(i => i.instance.instanceId !== item.instance.instanceId));
+              setInventory(prev => [...prev, item.instance]);
+              notify("Grading Cancelled (No Refund)");
+          };
+
+          const buyGradingLicense = () => {
+              if (cash >= 5000) {
+                  setCash(c => c - 5000);
+                  setHasGradingLicense(true);
+                  notify("Grading Station Unlocked!");
+              }
+          };
+
+          const uniqueCount = Object.keys(collection).length;
+          const totalGrades = Object.values(collection).reduce((acc, entry) => acc + (entry.grades ? entry.grades.length : 0), 0);
+          const pendingVoidStones = Math.floor(Math.pow((uniqueCount * 2) + totalGrades, 1.5));
+
+          const ascend = () => {
+              if (pendingVoidStones <= 0) return;
+              setInventory([]); setCash(0); setCollection({}); setVoidStones(v => v + pendingVoidStones); setHasGradingLicense(false); setRevealedCards([]); setOpeningState('idle'); setMarketListings([]); setGradingQueue([]); setAscendModalOpen(false); setView('talents');
+          };
+          
+          const hardReset = () => { localStorage.removeItem('tcgInd_v1'); window.location.reload(); };
+          const buyTalent = (tid) => { const lvl = talents[tid]; const cost = calculateTalentCost(tid, lvl); if (voidStones >= cost) { setVoidStones(v => v - cost); setTalents(t => ({ ...t, [tid]: lvl + 1 })); } };
+
+          const filteredInventory = useMemo(() => {
+              let result = inventory.filter(item => {
+                  const data = CARD_DATABASE.find(c => c.id === item.cardId);
+                  if (filterRarity !== 'all' && data.tierId !== filterRarity) return false;
+                  if (filterStatus === 'graded' && !item.grade) return false;
+                  if (filterStatus === 'raw' && item.grade) return false;
+                  if (filterStatus === 'foil' && item.effect === 'none' && !item.isFoil) return false;
+                  return true;
+              });
+              result.sort((a, b) => {
+                  const dataA = CARD_DATABASE.find(c => c.id === a.cardId);
+                  const dataB = CARD_DATABASE.find(c => c.id === b.cardId);
+                  if (sortOrder === 'price-desc') return b.value - a.value;
+                  if (sortOrder === 'price-asc') return a.value - b.value;
+                  if (sortOrder === 'rarity-desc') return RARITY_RANK[dataB.tierId] - RARITY_RANK[dataA.tierId];
+                  if (sortOrder === 'rarity-asc') return RARITY_RANK[dataA.tierId] - RARITY_RANK[dataB.tierId];
+                  return 0;
+              });
+              return result;
+          }, [inventory, filterRarity, filterStatus, sortOrder]);
+
+          const maxGradingSlots = 5 + (talents.gradeSlots || 0);
+
+          return (
+            <div className="w-full min-h-screen bg-slate-950 text-slate-200 font-sans flex flex-col items-center">
+              {/* Header */}
+              <div className="w-full bg-slate-900 border-b border-slate-800 p-3 sticky top-0 z-50 shadow-2xl flex justify-between items-center max-w-5xl">
+                 <div className="flex items-center gap-3">
+                     <div className="w-10 h-10 bg-indigo-600 rounded flex items-center justify-center border border-indigo-500 shadow-lg"><Store size={20} className="text-white" /></div>
+                     <div><h1 className="font-bold text-lg text-indigo-400 tracking-wider">MARKET TCG</h1><div className="text-[10px] text-slate-500 font-mono">LVL {talents.work + 1} HUSTLER</div></div>
+                 </div>
+                 <div className="flex items-center gap-4">
+                    <button onClick={manualWork} className="hidden md:flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 rounded text-xs font-bold transition-all active:scale-95"><Hammer size={14} /> Work (+${1 + talents.work})</button>
+                    <div className="flex gap-4 bg-black/40 px-4 py-2 rounded border border-slate-800 backdrop-blur-md">
+                        <div className="flex items-center gap-2 text-green-400"><Wallet size={16} /><span className="font-mono font-bold">${formatNumber(cash)}</span></div>
+                        <div className="w-px bg-slate-700" />
+                        <div className="flex items-center gap-2 text-purple-400"><Star size={16} /><span className="font-mono font-bold">{formatNumber(voidStones)}</span></div>
+                    </div>
+                 </div>
+              </div>
+              <button onClick={manualWork} className="md:hidden fixed bottom-4 right-4 z-40 bg-indigo-600 w-16 h-16 rounded-full shadow-2xl flex items-center justify-center border-4 border-slate-900 active:scale-90 transition-transform"><Hammer className="text-white" /></button>
+
+              <div className="w-full max-w-5xl flex-grow p-4 flex flex-col relative pb-20">
+                  <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
+                      {[{ id: 'packs', icon: Coins, label: 'Shop' }, { id: 'inventory', icon: Wallet, label: `Cards (${inventory.length})` }, { id: 'market', icon: Store, label: `Market (${marketListings.length})` }, { id: 'grading', icon: Stamp, label: `Grading (${gradingQueue.length})` }, { id: 'collection', icon: Grid, label: 'Book' }, { id: 'talents', icon: Zap, label: 'Talents' }, { id: 'settings', icon: Settings, label: 'Settings' }].map(tab => (
+                          <button key={tab.id} onClick={() => setView(tab.id)} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm whitespace-nowrap transition-all border ${view === tab.id ? 'bg-indigo-600 text-white border-indigo-500 shadow-lg shadow-indigo-900/50' : 'bg-slate-900 text-slate-500 border-slate-800 hover:bg-slate-800'}`}><tab.icon size={14} /> {tab.label}</button>
+                      ))}
+                      <button onClick={() => setAscendModalOpen(true)} className="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm bg-purple-900/50 border border-purple-500 text-purple-200 hover:bg-purple-900"><TrendingUp size={14} /> Ascend</button>
+                  </div>
+
+                  {notification && <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-xs font-bold px-4 py-2 rounded-full shadow-xl z-[100] animate-bounce pointer-events-none">{notification}</div>}
+
+                  {view === 'opening' && (
+                      <div className="flex flex-col items-center justify-center min-h-[50vh]">
+                          {openingState === 'shaking' && <div className="animate-shake text-9xl mt-20">📦</div>}
+                          {openingState === 'revealed' && (
+                              <div className="animate-fade-in flex flex-col items-center w-full">
+                                  <h2 className="text-3xl font-black mb-8 text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">PACK OPENED</h2>
+                                  <div className="flex flex-wrap justify-center gap-4 mb-32 w-full overflow-y-auto" style={{ maxHeight: '60vh' }}>{revealedCards.map((card, i) => <div key={card.instanceId} className="animate-pop" style={{ animationDelay: i * 100 + 'ms' }}><Card instance={card} onClick={()=>{}} isNew={true} showValue={true} /></div>)}</div>
+                                  <div className="fixed bottom-0 left-0 w-full bg-slate-900/90 backdrop-blur-md border-t border-slate-800 p-4 flex justify-center gap-4 z-50 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]"><button onClick={() => takeCards()} className="bg-slate-700 hover:bg-slate-600 text-white px-8 py-3 rounded-xl font-bold flex-1 max-w-[200px]">Done</button>{openingPackId !== null && cash >= PACKS[openingPackId].cost * (1 - talents.discount*0.01) && <button onClick={() => takeCards(openingPackId)} className="bg-green-600 hover:bg-green-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-green-900/50 flex items-center justify-center gap-2 flex-1 max-w-[200px]">Again <RotateCcw size={18} /></button>}</div>
+                              </div>
+                          )}
+                      </div>
+                  )}
+
+                  {view === 'packs' && (
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                          {PACKS.map(pack => {
+                              const cost = Math.floor(pack.cost * (1 - talents.discount * 0.01));
+                              const canAfford = cash >= cost;
+                              return (
+                                  <button key={pack.id} onClick={() => buyPack(pack.id)} disabled={!canAfford} className={`flex flex-col p-3 rounded-xl border text-left transition-all relative overflow-hidden min-h-[140px] ${canAfford ? 'bg-slate-900 border-slate-700 hover:border-indigo-500 hover:shadow-xl' : 'bg-slate-900 border-slate-800 opacity-50 cursor-not-allowed'} ${pack.id === 7 ? 'border-purple-500/50 bg-purple-900/10' : ''}`}><div className="text-3xl mb-2">📦</div><div className="font-bold text-sm text-slate-200 leading-tight mb-1">{pack.name}</div><div className={`mt-auto px-2 py-1 rounded text-[10px] font-mono font-bold w-fit ${canAfford ? 'bg-indigo-900 text-indigo-200' : 'bg-slate-800 text-slate-500'}`}>${formatNumber(cost)}</div></button>
+                              )
+                          })}
+                          {!hasGradingLicense && <button onClick={buyGradingLicense} disabled={cash < 5000} className={`flex flex-col p-3 rounded-xl border border-dashed border-yellow-700/50 text-left relative overflow-hidden min-h-[140px] ${cash >= 5000 ? 'bg-yellow-900/10 hover:bg-yellow-900/20 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}><div className="absolute top-2 right-2 text-yellow-500"><Lock size={14} /></div><div className="text-3xl mb-2">💎</div><div className="font-bold text-sm text-yellow-500">Grading</div><div className="mt-auto px-2 py-1 bg-yellow-900 text-yellow-200 rounded text-[10px] font-mono font-bold w-fit">$5,000</div></button>}
+                      </div>
+                  )}
+
+                  {view === 'inventory' && (
+                      <div className="w-full">
+                          <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 mb-4 flex flex-col gap-4">
+                               <div className="flex justify-between items-center"><span className="text-sm font-mono text-green-400">Total Val: ${formatNumber(inventory.reduce((a,b)=>a+b.value,0))}</span><span className="text-xs text-slate-500">Showing {filteredInventory.length} cards</span></div>
+                               <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-800">
+                                   <div className="flex items-center gap-2"><Filter size={14} className="text-slate-500"/><select value={filterRarity} onChange={(e) => setFilterRarity(e.target.value)} className="bg-slate-800 text-xs text-slate-300 rounded px-2 py-1 border border-slate-700 focus:outline-none"><option value="all">All Rarities</option>{RARITY_TIERS.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
+                                   <div className="flex items-center gap-2"><select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="bg-slate-800 text-xs text-slate-300 rounded px-2 py-1 border border-slate-700 focus:outline-none"><option value="all">All Status</option><option value="raw">Raw Only</option><option value="graded">Graded Only</option><option value="foil">Foil/Holo Only</option></select></div>
+                                   <div className="flex items-center gap-2"><ArrowDownUp size={14} className="text-slate-500"/><select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="bg-slate-800 text-xs text-slate-300 rounded px-2 py-1 border border-slate-700 focus:outline-none"><option value="price-desc">Price: High</option><option value="price-asc">Price: Low</option><option value="rarity-desc">Rarity: High</option><option value="rarity-asc">Rarity: Low</option></select></div>
+                                   {(filterRarity !== 'all' || filterStatus !== 'all') && <button onClick={() => { setFilterRarity('all'); setFilterStatus('all'); }} className="text-xs text-red-400 flex items-center gap-1 hover:text-red-300 ml-auto"><X size={12} /> Clear</button>}
+                               </div>
+                               
+                               <div className="flex flex-col gap-2 border-t border-slate-800 pt-2">
+                                   <button onClick={marketAllNormals} className="w-full bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-indigo-900/50 py-2 rounded text-xs font-bold uppercase tracking-wider">Liquidate All Bulk</button>
+                                   <div className="flex gap-2 justify-center flex-wrap">
+                                       {RARITY_TIERS.slice(0, 7).map(tier => ( // Exclude Transcendent
+                                           <button 
+                                                key={tier.id}
+                                                onClick={() => marketByRarity(tier.id)}
+                                                className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg border border-white/10 hover:scale-110 transition-transform ${tier.btn}`}
+                                                title={`Sell all Normal ${tier.name}`}
+                                           >
+                                               <Store size={14} className="text-white" />
+                                           </button>
+                                       ))}
+                                   </div>
+                               </div>
+                          </div>
+                          {filteredInventory.length === 0 ? <div className="text-center py-20 text-slate-600">No cards match filter.</div> : (
+                              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">{filteredInventory.map(item => <div key={item.instanceId} className="flex flex-col gap-2 items-center bg-slate-900 p-2 rounded-xl border border-slate-800"><Card instance={item} onClick={() => listOnMarket(item)} onAction={hasGradingLicense ? sendToGrading : null} actionLabel="grade" /><div className="flex w-full gap-1"><button onClick={() => quickSell(item)} className="flex-1 bg-red-900/50 hover:bg-red-900 text-red-200 text-[10px] py-1 rounded border border-red-800">Sell ${formatNumber(Math.floor(item.value * 0.5))}</button></div></div>)}</div>
+                          )}
+                      </div>
+                  )}
+
+                  {view === 'market' && (
+                      <div className="w-full">
+                          <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><Store size={20}/> Active Listings ({marketListings.length})</h2>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {marketListings.map(item => {
+                                  const total = item.finishAt - item.listedAt;
+                                  const elapsed = currentTime - item.listedAt;
+                                  const progress = Math.min(100, (elapsed / total) * 100);
+                                  const timeLeft = Math.max(0, Math.ceil((item.finishAt - currentTime) / 1000));
+                                  return (
+                                      <div key={item.instance.instanceId} className="bg-slate-900 p-3 rounded-xl border border-slate-800 flex gap-4 items-center relative">
+                                          <button onClick={() => cancelListing(item)} className="absolute top-2 right-2 text-slate-500 hover:text-white"><X size={14} /></button>
+                                          <div className="scale-75 origin-left"><Card instance={item.instance} showValue={false} /></div>
+                                          <div className="flex-grow">
+                                              <div className="flex justify-between mb-1"><span className="font-bold text-slate-200">Buyer...</span><span className="font-mono text-green-400">${formatNumber(item.price)}</span></div>
+                                              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-1"><div className="bg-indigo-500 h-full transition-all duration-75 ease-linear" style={{ width: `${progress}%` }} /></div>
+                                              <div className="text-xs text-slate-500 text-right">{timeLeft}s</div>
+                                          </div>
+                                      </div>
+                                  )
+                              })}
+                          </div>
+                      </div>
+                  )}
+
+                  {view === 'grading' && (
+                      <div className="w-full">
+                          <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><Stamp size={20}/> Grading Queue ({gradingQueue.length}/{maxGradingSlots})</h2>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              {gradingQueue.map(item => {
+                                   const total = item.finishAt - item.startAt;
+                                   const elapsed = currentTime - item.startAt;
+                                   const progress = Math.min(100, (elapsed / total) * 100);
+                                   const timeLeft = Math.max(0, Math.ceil((item.finishAt - currentTime) / 1000));
+                                   return (
+                                       <div key={item.instance.instanceId} className="bg-slate-900 p-6 rounded-xl border border-slate-800 flex flex-col items-center text-center relative">
+                                           <button onClick={() => cancelGrading(item)} className="absolute top-2 right-2 text-slate-500 hover:text-red-400"><X size={16} /></button>
+                                           <div className="mb-4 animate-pulse"><Stamp size={32} className="text-slate-600"/></div>
+                                           <div className="font-bold mb-2">Grading</div>
+                                           <div className="text-xs text-slate-500 mb-4">{item.instance.name}</div>
+                                           <div className="w-full bg-slate-800 h-4 rounded-full overflow-hidden mb-2 relative"><div className="bg-yellow-600 h-full transition-all duration-75 ease-linear" style={{ width: `${progress}%` }} /></div>
+                                           <div className="font-mono text-sm text-yellow-500">{timeLeft}s</div>
+                                       </div>
+                                   )
+                              })}
+                              {Array.from({ length: Math.max(0, maxGradingSlots - gradingQueue.length) }).map((_, i) => (
+                                  <div key={i} className="bg-slate-900/50 border-2 border-dashed border-slate-800 rounded-xl p-6 flex flex-col items-center justify-center text-slate-600"><span className="font-bold">Empty</span><span className="text-xs">Send from Inventory</span></div>
+                              ))}
+                          </div>
+                      </div>
+                  )}
+
+                  {view === 'collection' && (
+                      <div className="w-full">
+                          <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 mb-6 flex justify-between">
+                              <div><h2 className="text-xl font-bold">Binder</h2><p className="text-xs text-slate-500">Grades count for Ascension!</p></div>
+                              <div className="font-mono text-indigo-400">{Object.keys(collection).length} / {CARD_DATABASE.length}</div>
+                          </div>
+                          <div className="space-y-8">
+                              {RARITY_TIERS.map(tier => {
+                                  const cards = CARD_DATABASE.filter(c => c.tierId === tier.id);
+                                  return (
+                                      <div key={tier.id}>
+                                          <div className={`text-xs font-bold uppercase mb-2 px-3 py-1 rounded-full w-fit bg-gradient-to-r ${tier.color} text-white`}>{tier.name}</div>
+                                          <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 gap-2">
+                                              {cards.map(c => {
+                                                  const entry = collection[c.id];
+                                                  const highestGrade = entry?.grades ? Math.max(...entry.grades) : 0;
+                                                  return (
+                                                      <div key={c.id} className={`aspect-[2/3] rounded border flex flex-col items-center justify-center p-1 text-center relative ${entry ? 'bg-slate-800 border-indigo-500/50' : 'bg-slate-950 border-slate-900 opacity-50'} ${entry?.holo ? 'ring-2 ring-yellow-500/50' : ''}`}>
+                                                          {entry ? (
+                                                              <>
+                                                                <div className="text-[8px] font-bold text-slate-300 leading-tight">{c.name}</div>
+                                                                {highestGrade > 0 && <div className="absolute top-0 right-0 bg-yellow-900 text-yellow-200 text-[6px] px-1 rounded-bl">{highestGrade}</div>}
+                                                              </>
+                                                          ) : <Lock size={12} className="text-slate-700"/>}
+                                                      </div>
+                                                  )
+                                              })}
+                                          </div>
+                                      </div>
+                                  )
+                              })}
+                          </div>
+                      </div>
+                  )}
+                  
+                   {view === 'talents' && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {TALENTS.map(t => {
+                              const lvl = talents[t.id];
+                              const cost = calculateTalentCost(t.id, lvl);
+                              const maxed = lvl >= t.max;
+                              return (
+                                  <div key={t.id} className="bg-slate-900 p-4 rounded border border-slate-800">
+                                      <div className="flex justify-between items-start mb-2"><h3 className="font-bold text-gray-200">{t.name}</h3><span className="text-xs bg-slate-800 px-2 py-1 rounded text-purple-400">Lvl {lvl}/{t.max}</span></div>
+                                      <p className="text-xs text-gray-500 mb-4 h-8">{t.desc}</p>
+                                      <button onClick={() => buyTalent(t.id)} disabled={maxed || voidStones < cost} className={`w-full py-2 rounded text-xs font-bold ${maxed ? 'bg-slate-800 text-gray-600' : voidStones >= cost ? 'bg-purple-700 text-white hover:bg-purple-600' : 'bg-slate-800 text-gray-500'}`}>{maxed ? 'MAXED' : `Upgrade (${formatNumber(cost)} Void)`}</button>
+                                  </div>
+                              )
+                          })}
+                      </div>
+                  )}
+
+                  {view === 'settings' && (
+                      <div className="flex flex-col items-center justify-center py-20 gap-8">
+                          <h2 className="text-2xl font-bold text-slate-400">Settings</h2>
+                          {!showResetModal ? (
+                              <button onClick={() => setShowResetModal(true)} className="flex items-center gap-2 bg-red-900/30 border border-red-900 text-red-500 px-6 py-3 rounded-xl font-bold hover:bg-red-900/50">
+                                  <Trash2 size={18} /> Wipe Save Data
+                              </button>
+                          ) : (
+                              <div className="bg-red-900/20 border border-red-500 p-6 rounded-xl text-center max-w-xs">
+                                  <AlertTriangle size={32} className="mx-auto text-red-500 mb-4"/>
+                                  <h3 className="font-bold text-red-200 mb-2">Are you sure?</h3>
+                                  <p className="text-xs text-red-300 mb-4">This will permanently delete all progress.</p>
+                                  <div className="flex gap-2 justify-center">
+                                      <button onClick={() => setShowResetModal(false)} className="px-4 py-2 bg-slate-800 rounded text-slate-300 text-xs font-bold">Cancel</button>
+                                      <button onClick={hardReset} className="px-4 py-2 bg-red-600 rounded text-white text-xs font-bold hover:bg-red-500">Yes, Wipe It</button>
+                                  </div>
+                              </div>
+                          )}
+                      </div>
+                  )}
+              </div>
+
+              {ascendModalOpen && (
+                  <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4">
+                      <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-lg p-6 relative shadow-2xl">
+                          <button onClick={() => setAscendModalOpen(false)} className="absolute top-4 right-4 text-slate-500">✕</button>
+                          <div className="text-center mb-6"><TrendingUp size={48} className="mx-auto text-purple-500 mb-2" /><h2 className="text-2xl font-bold text-white">ASCENSION</h2><p className="text-xs text-slate-500 mt-2">Reset inventory & cash. Keep Talents & Book Progress.</p></div>
+                          <div className="bg-slate-950 p-4 rounded border border-slate-800 mb-6"><div className="flex justify-between mb-2"><span className="text-slate-400 text-sm">Unique Cards Found:</span><span className="text-blue-400 font-bold">{uniqueCount}</span></div><div className="flex justify-between pt-2 border-t border-slate-800"><span className="text-purple-400 font-bold">Void Stones to Gain:</span><span className="text-white font-mono text-xl">+{formatNumber(pendingVoidStones)}</span></div></div>
+                          <button onClick={ascend} disabled={pendingVoidStones <= 0} className={`w-full py-3 rounded font-bold ${pendingVoidStones > 0 ? 'bg-purple-700 hover:bg-purple-600 text-white' : 'bg-slate-800 text-slate-600'}`}>{pendingVoidStones > 0 ? 'WIPE & ASCEND' : 'COLLECT MORE CARDS FIRST'}</button>
+                      </div>
+                  </div>
+              )}
+
+              {gameWon && (
+                  <div className="fixed inset-0 bg-black z-[200] flex items-center justify-center p-4 animate-fade-in">
+                      <div className="text-center">
+                          <div className="animate-cosmic mb-8 inline-block p-8 rounded-full bg-white/5 border border-white/20"><Infinity size={80} className="text-white" /></div>
+                          <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-500 via-purple-500 to-cyan-500 mb-4">ASCENDED</h1>
+                          <p className="text-xl text-slate-400 mb-8 max-w-md mx-auto">You have found the Omega Monolith. You have reached the final form of existence.</p>
+                          <button onClick={() => setGameWon(false)} className="px-8 py-4 bg-white text-black font-black rounded-full hover:scale-105 transition-transform">CONTINUE PLAYING</button>
+                      </div>
+                  </div>
+              )}
+            </div>
+          );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
